@@ -1,0 +1,42 @@
+# --- Cluster Settings ---
+sonar.cluster.enabled=true
+sonar.cluster.name=${cluster_name}
+sonar.cluster.node.name=${node_name}
+sonar.auth.jwtBase64Hs256Secret=${jwt_secret}
+
+%{ if node_type == "application" ~}
+# APPLICATION NODE CONFIG
+sonar.cluster.node.type=application
+sonar.cluster.node.host=${static_ip}
+sonar.web.host=0.0.0.0
+sonar.web.port=9000
+sonar.cluster.hosts=${app_cluster_hosts}
+sonar.cluster.search.hosts=${search_hosts}
+
+# App Specific Ports
+sonar.cluster.node.port=${app_cluster_port}
+sonar.cluster.node.web.port=${app_web_cluster_port}
+sonar.cluster.node.ce.port=${app_ce_cluster_port}
+sonar.web.systemPasscode=${system_passcode}
+sonar.web.javaOpts=-Xms2G -Xmx2G
+sonar.ce.javaOpts=-Xmx2G -Xms2G
+%{ endif ~}
+
+%{ if node_type == "search" ~}
+# SEARCH NODE CONFIG
+sonar.cluster.node.type=search
+sonar.cluster.node.search.host=${static_ip}
+sonar.cluster.node.search.port=${search_port}
+sonar.cluster.es.hosts=${es_hosts}
+sonar.cluster.node.es.host=${static_ip}
+sonar.cluster.node.es.port=${es_port}
+sonar.search.initialStateTimeout=60s
+sonar.search.javaOpts=-Xms512m -Xmx512m
+%{ endif ~}
+
+# --- Logs & Paths ---
+sonar.log.level=INFO
+sonar.path.data=${data_path}
+sonar.path.temp=${temp_path}
+sonar.telemetry.enable=false
+sonar.updatecenter.activate=false

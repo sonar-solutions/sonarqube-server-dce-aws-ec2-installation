@@ -1,0 +1,99 @@
+#!/bin/bash
+set -euxo pipefail
+
+SONAR_URL='${url}'
+INSTALL_PATH='${path}'
+ZIP_FILENAME='${zip_filename}'
+JDBC_URL='${jdbc_url}'
+DB_USERNAME='${db_username}'
+DB_PASSWORD='${db_password}'
+NODE_ROLE='${node_role}'
+CLUSTER_CONFIG=$(cat <<'CLUSTER_CONFIG_EOF'
+${cluster_config}
+CLUSTER_CONFIG_EOF
+)
+
+if command -v dnf >/dev/null 2>&1; then
+  dnf update -y
+  dnf install -y java-21-amazon-corretto unzip wget
+elif command -v yum >/dev/null 2>&1; then
+  yum update -y
+  yum install -y java-21-amazon-corretto unzip wget
+elif command -v apt-get >/dev/null 2>&1; then
+  apt-get update -y
+  apt-get install -y openjdk-21-jdk unzip wget
+fi
+
+mkdir -p "$INSTALL_PATH"
+cd "$INSTALL_PATH"
+wget -O "$ZIP_FILENAME" "$SONAR_URL"
+unzip -o "$ZIP_FILENAME"
+SONAR_HOME=$(find "$INSTALL_PATH" -maxdepth 1 -type d -name 'sonarqube*' | sort | tail -n 1)
+SONAR_LINK="$(realpath -m "$INSTALL_PATH/sonarqube")"
+if [ -e "$SONAR_LINK" ] && [ ! -L "$SONAR_LINK" ]; then
+  rm -rf "$SONAR_LINK"
+fi
+ln -sfn "$SONAR_HOME" "$SONAR_LINK"
+
+cat >> "$SONAR_HOME/conf/sonar.properties" <<SONAR_CONFIG_EOF
+
+################################################################################
+# Configuration added by launch script
+################################################################################
+sonar.jdbc.url=$JDBC_URL
+sonar.jdbc.username=$DB_USERNAME
+sonar.jdbc.password=$DB_PASSWORD
+sonar.jdbc.maxActive=60
+sonar.jdbc.maxIdle=5
+sonar.jdbc.minIdle=2
+sonar.jdbc.maxWait=5000
+sonar.jdbc.minEvictableIdleTimeMillis=600000
+sonar.jdbc.timeBetweenEvictionRunsMillis=30000
+sonar.jdbc.removeAbandonedTimeout=86400
+sonar.jdbc.removeAbandoned=true
+sonar.jdbc.logAbandoned=true
+sonar.jdbc.validationQuery=select 1
+$CLUSTER_CONFIG
+SONAR_CONFIG_EOF
+
+useradd --system --no-create-home --shell /sbin/nologin sonar || true
+mkdir -p "$SONAR_HOME/data" "$SONAR_HOME/temp"
+chown -R sonar:sonar "$SONAR_HOME"
+chown -h sonar:sonar "$SONAR_LINK"
+
+cat > /etc/systemd/system/sonarqube.service <<SERVICE_EOF
+[Unit]
+Description=SonarQube $NODE_ROLE node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=sonar
+Group=sonar
+ExecStart=$SONAR_HOME/bin/linux-x86-64/sonar.sh start
+ExecStop=$SONAR_HOME/bin/linux-x86-64/sonar.sh stop
+Restart=on-failure
+RestartSec=20
+LimitNOFILE=131072
+LimitNPROC=8192
+TimeoutStartSec=600
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
+SERVICE_EOF
+
+sysctl -w vm.max_map_count=524288
+sysctl -w fs.file-max=131072
+printf 'vm.max_map_count=524288\nfs.file-max=131072\n' > /etc/sysctl.d/99-sonarqube.conf
+
+systemctl daemon-reload
+systemctl enable sonarqube
+systemctl start sonarqube
+sleep 60
+systemctl --no-pager status sonarqube || true
+tail -n 200 "$SONAR_HOME/logs/sonar.log" || true
+tail -n 200 "$SONAR_HOME/logs/web.log" || true
+tail -n 200 "$SONAR_HOME/logs/es.log" || true

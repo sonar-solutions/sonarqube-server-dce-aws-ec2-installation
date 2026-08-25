@@ -1,0 +1,89 @@
+<powershell>
+$ErrorActionPreference = "Stop"
+Start-Transcript -Path "C:\Userdata.log" -Append
+
+$root = "${path}"
+$installerRoot = "${installer_path}"
+$url = "${url}"
+$zipName = "${zip_filename}"
+$javaUrl = "${java_url}"
+$javaName = "${java_filename}"
+$jdbcUrl = "${jdbc_url}"
+$dbUser = "${db_username}"
+$dbPass = "${db_password}"
+$clusterConfig = @'
+${cluster_config}
+'@
+
+New-Item -ItemType Directory -Force -Path $root, $installerRoot | Out-Null
+$prod = Join-Path $root "prod"
+$extract = Join-Path $installerRoot "extract"
+$zipPath = Join-Path $installerRoot $zipName
+$javaPath = Join-Path $installerRoot $javaName
+
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$wc = New-Object Net.WebClient
+$wc.DownloadFile($javaUrl, $javaPath)
+Start-Process msiexec.exe -ArgumentList "/i `"$javaPath`" INSTALLLEVEL=1 /quiet /norestart" -Wait
+
+$java = Get-ChildItem -Path @(
+  "C:\Program Files\Eclipse Adoptium\*\bin\java.exe",
+  "C:\Program Files\Java\*\bin\java.exe",
+  "C:\Program Files\Eclipse Foundation\*\bin\java.exe"
+) -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $java) { throw "Java installation not found" }
+$javaBin = Split-Path $java.FullName -Parent
+$javaHome = Split-Path $javaBin -Parent
+$env:JAVA_HOME = $javaHome
+$env:SONAR_JAVA_PATH = $java.FullName
+$env:PATH = "$javaBin;$env:PATH"
+[Environment]::SetEnvironmentVariable("JAVA_HOME", $javaHome, "Machine")
+[Environment]::SetEnvironmentVariable("SONAR_JAVA_PATH", $java.FullName, "Machine")
+$machinePath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
+if ($machinePath -notlike "*$javaBin*") {
+  [Environment]::SetEnvironmentVariable("PATH", "$javaBin;$machinePath", "Machine")
+}
+
+$wc.DownloadFile($url, $zipPath)
+Remove-Item -Path $extract, $prod, (Join-Path $installerRoot "tmp_extract"), (Join-Path $root "tmp_extract") -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $extract, $prod | Out-Null
+Expand-Archive -Path $zipPath -DestinationPath $extract -Force
+$src = Get-ChildItem -Path $extract -Directory -Filter "sonarqube-*" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if (-not $src) { throw "Unexpected SonarQube zip layout" }
+Move-Item -Path (Join-Path $src.FullName "*") -Destination $prod -Force
+Remove-Item -Path $extract -Recurse -Force
+New-Item -ItemType Directory -Force -Path (Join-Path $prod "data"), (Join-Path $prod "temp") | Out-Null
+
+$props = Join-Path $prod "conf\sonar.properties"
+if (-not (Test-Path $props)) { throw "sonar.properties not found at $props" }
+@"
+
+################################################################################
+# Configuration added by launch script
+################################################################################
+sonar.jdbc.url=$jdbcUrl
+sonar.jdbc.username=$dbUser
+sonar.jdbc.password=$dbPass
+$clusterConfig
+"@ | Add-Content -Path $props
+Write-Host "Wrote DCE configuration to $props"
+
+New-NetFirewallRule -DisplayName "SonarQube-DCE-TCP" -Direction Inbound -LocalPort 9000-9012 -Protocol TCP -Action Allow -Profile Any -ErrorAction SilentlyContinue | Out-Null
+
+$svc = Join-Path $prod "bin\windows-x86-64\SonarService.bat"
+if (-not (Test-Path $svc)) { throw "SonarService.bat not found at $svc" }
+Push-Location (Split-Path $svc -Parent)
+& $svc stop
+& $svc remove
+& $svc install
+& $svc start
+Pop-Location
+
+if ([bool]::Parse("${install_chromium}")) {
+  Set-ExecutionPolicy Bypass -Scope Process -Force
+  iex ($wc.DownloadString("https://community.chocolatey.org/install.ps1"))
+  choco install -y chromium
+}
+
+Stop-Transcript
+</powershell>
