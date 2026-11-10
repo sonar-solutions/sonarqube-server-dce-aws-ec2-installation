@@ -80,15 +80,9 @@ terraform plan
 terraform apply
 ```
 
-The sample file is set up for a first test deployment without a public hosted zone or public certificate:
-
-```json
-"route53_zone_mode": "none",
-"certificate_mode": "none",
-"plaintext_listener_port": 9000
-```
-
-That mode skips Route53, skips ACM, and exposes the Network Load Balancer on TCP port `9000`.
+The sample requires a public Route53 hosted zone matching `domain_name` with
+working delegation. Terraform looks up that zone, creates and validates an ACM
+certificate automatically, and exposes the application over HTTPS on port 443.
 
 You can also use one of the included examples:
 
@@ -192,81 +186,17 @@ Database:
 
 DNS and TLS:
 
-- `route53_zone_mode`: `lookup`, `create`, `existing`, or `none`.
-- `route53_zone_id`: required when `route53_zone_mode = "existing"`.
-- `certificate_mode`: `create`, `existing`, or `none`.
-- `acm_certificate_arn`: required when `certificate_mode = "existing"`.
-- `acm_validation_timeout`: timeout for ACM DNS validation.
-- `plaintext_listener_port`: public TCP listener port when `certificate_mode = "none"`.
-
-## Route53 Hosted Zone Modes
-
-Use `lookup` when a public hosted zone already exists and can be found by `domain_name`:
-
-```json
-"route53_zone_mode": "lookup",
-"route53_zone_id": null
-```
-
-Use `create` when Terraform should create the public hosted zone:
-
-```json
-"route53_zone_mode": "create",
-"route53_zone_id": null
-```
-
-If the domain is registered outside Route53, update the registrar with the created zone's name servers before ACM validation can complete.
-
-Use `existing` when you already know the hosted zone ID:
-
-```json
-"route53_zone_mode": "existing",
-"route53_zone_id": "Z1234567890ABC"
-```
-
-Use `none` when you do not want Terraform to manage DNS records:
-
-```json
-"route53_zone_mode": "none",
-"route53_zone_id": null
-```
-
-This is useful for early testing with the Network Load Balancer DNS name.
-
-## Certificate Modes
-
-Create a certificate and DNS validation records:
-
-```json
-"certificate_mode": "create",
-"acm_certificate_arn": null,
-"acm_validation_timeout": "45m"
-```
-
-Use an existing ACM certificate:
-
-```json
-"certificate_mode": "existing",
-"acm_certificate_arn": "arn:aws:acm:REGION:ACCOUNT:certificate/ID"
-```
-
-The certificate must be in the same region as the Network Load Balancer.
-
-Bypass ACM and TLS completely:
-
-```json
-"certificate_mode": "none",
-"acm_certificate_arn": null,
-"plaintext_listener_port": 9000
-```
-
-This creates a plain TCP listener on the Network Load Balancer and forwards to SonarQube on port `9000`. Use this when you do not have a public certificate yet.
+- An existing public Route53 zone is looked up automatically using `domain_name`.
+- Terraform creates a DNS-validated ACM certificate and an HTTPS listener on port 443.
+- A working public delegation is required; this module does not create or delegate hosted zones.
+- DNS and HTTPS are required; there is no plaintext-listener or certificate-disable option.
+- `acm_validation_timeout` controls how long Terraform waits for certificate validation.
 
 ## Outputs
 
 Useful outputs after apply:
 
-- `sonarqube_url`: public URL. This is HTTPS for ACM-backed deployments and HTTP with the NLB DNS name when `certificate_mode = "none"`.
+- `sonarqube_url`: public HTTPS URL.
 - `app_node_private_ips`: AWS-assigned application node private IPs.
 - `search_node_private_ips`: AWS-assigned search node private IPs.
 - `rds_endpoint`: PostgreSQL endpoint.
@@ -274,7 +204,6 @@ Useful outputs after apply:
 - `rds_master_password`: generated database password, marked sensitive.
 - `private_key_path`: generated EC2 private key path.
 - `route53_zone_id`: hosted zone used by the deployment.
-- `route53_name_servers`: name servers when Terraform creates a zone.
 - `certificate_arn`: ACM certificate used by the TLS listener.
 
 ## Operational Notes

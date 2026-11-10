@@ -9,6 +9,17 @@ variable "app_instance_type" {
   default     = "m6a.xlarge"
 }
 
+variable "app_volume_size_gb" {
+  type        = number
+  description = "Encrypted gp3 root volume size for Linux DCE application nodes."
+  default     = 100
+
+  validation {
+    condition     = var.app_volume_size_gb >= 50 && floor(var.app_volume_size_gb) == var.app_volume_size_gb
+    error_message = "app_volume_size_gb must be a whole number of at least 50 GiB."
+  }
+}
+
 variable "search_instance_type" {
   type        = string
   description = "EC2 instance type for DCE search nodes."
@@ -323,48 +334,8 @@ variable "search_volume_type" {
   default     = "gp3"
 }
 
-variable "route53_zone_mode" {
-  type        = string
-  description = "How to select the public Route53 hosted zone: lookup, create, existing, or none."
-  default     = "lookup"
-
-  validation {
-    condition     = contains(["lookup", "create", "existing", "none"], var.route53_zone_mode)
-    error_message = "route53_zone_mode must be lookup, create, existing, or none."
-  }
-}
-
-variable "route53_zone_id" {
-  type        = string
-  description = "Existing public Route53 hosted zone ID. Required when route53_zone_mode is existing."
-  default     = null
-}
-
-variable "certificate_mode" {
-  type        = string
-  description = "How to provide the load balancer certificate: create, existing, or none."
-  default     = "create"
-
-  validation {
-    condition     = contains(["create", "existing", "none"], var.certificate_mode)
-    error_message = "certificate_mode must be create, existing, or none."
-  }
-}
-
-variable "acm_certificate_arn" {
-  type        = string
-  description = "Existing ACM certificate ARN. Required when certificate_mode is existing."
-  default     = null
-}
-
 variable "acm_validation_timeout" {
   type        = string
-  description = "How long Terraform waits for ACM DNS validation when certificate_mode is create."
+  description = "How long Terraform waits for ACM DNS validation."
   default     = "45m"
-}
-
-variable "plaintext_listener_port" {
-  type        = number
-  description = "Public NLB listener port used when certificate_mode is none."
-  default     = 9000
 }

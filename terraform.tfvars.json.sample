@@ -18,12 +18,7 @@
     "us-east-1a",
     "us-east-1b"
   ],
-  "route53_zone_mode": "none",
-  "route53_zone_id": null,
-  "certificate_mode": "none",
-  "acm_certificate_arn": null,
   "acm_validation_timeout": "45m",
-  "plaintext_listener_port": 9000,
   "hostname": "sq-dce",
   "domain_name": "sonar.labs",
   "rds_name": "sonarqube-dce-db",

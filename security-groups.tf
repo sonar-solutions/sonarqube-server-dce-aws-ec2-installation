@@ -33,6 +33,10 @@ resource "aws_security_group" "app" {
     Name  = "${local.sanitized_hostname}-app"
     Owner = var.owner
   }
+
+  lifecycle {
+    ignore_changes = [ingress]
+  }
 }
 
 resource "aws_security_group" "search" {

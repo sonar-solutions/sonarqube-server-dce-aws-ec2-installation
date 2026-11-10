@@ -1,5 +1,5 @@
 output "sonarqube_url" {
-  value       = var.certificate_mode == "none" ? "http://${local.public_host}:${var.plaintext_listener_port}" : "https://${local.public_host}"
+  value       = "https://${local.public_host}"
   description = "Public URL to access SonarQube."
 }
 
@@ -44,12 +44,7 @@ output "route53_zone_id" {
   description = "Route53 hosted zone ID used for DNS records."
 }
 
-output "route53_name_servers" {
-  value       = local.route53_name_servers
-  description = "Name servers for the created hosted zone. Empty unless route53_zone_mode is create."
-}
-
 output "certificate_arn" {
   value       = local.certificate_arn
-  description = "ACM certificate ARN used by the load balancer listener. Null when certificate_mode is none."
+  description = "ACM certificate ARN used by the HTTPS load balancer listener."
 }

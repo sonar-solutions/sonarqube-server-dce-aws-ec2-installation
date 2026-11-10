@@ -1,6 +1,6 @@
 # SonarQube DCE on AWS EC2
 
-Terraform-only deployment for SonarQube Data Center Edition on AWS EC2. This project creates a DCE cluster with separate application and search nodes, PostgreSQL on RDS, a Network Load Balancer, optional Route53 DNS, and optional ACM TLS.
+Terraform-only deployment for SonarQube Data Center Edition on AWS EC2. This project creates a DCE cluster with separate application and search nodes, PostgreSQL on RDS, a Network Load Balancer, Route53 DNS, and ACM TLS.
 
 There is no Ansible playbook in this deployment.
 
@@ -22,8 +22,8 @@ Terraform creates:
 - EC2 app nodes and search nodes.
 - RDS PostgreSQL.
 - Network Load Balancer and app-node target group.
-- Optional TLS listener with ACM.
-- Optional Route53 record and hosted zone handling.
+- Required TLS listener with an automatically created ACM certificate.
+- Route53 records in an automatically discovered existing public hosted zone.
 - EC2 key pair and local private key file.
 
 Only app nodes are registered behind the public SonarQube listener. Search nodes stay private.
@@ -72,13 +72,10 @@ terraform plan
 terraform apply
 ```
 
-For a no-DNS/no-certificate test deployment, use:
-
-```json
-"route53_zone_mode": "none",
-"certificate_mode": "none",
-"plaintext_listener_port": 9000
-```
+Set `domain_name` to a public Route53 hosted zone that already exists and has
+working public delegation. The module automatically looks up that zone, creates
+and validates an ACM certificate for the application hostname, and serves
+HTTPS on port 443. DNS and TLS cannot be disabled.
 
 Then use:
 
@@ -206,26 +203,11 @@ RDP:
 
 ## DNS And TLS
 
-Route53:
-
-- `route53_zone_mode = "lookup"`: use a public hosted zone found by `domain_name`.
-- `route53_zone_mode = "create"`: create a public hosted zone.
-- `route53_zone_mode = "existing"`: use `route53_zone_id`.
-- `route53_zone_mode = "none"`: do not manage DNS.
-
-Certificate:
-
-- `certificate_mode = "create"`: create ACM certificate and DNS validation records.
-- `certificate_mode = "existing"`: use `acm_certificate_arn`.
-- `certificate_mode = "none"`: no TLS listener; creates a plain TCP listener on `plaintext_listener_port`.
-
-For early testing without a public certificate:
-
-```json
-"route53_zone_mode": "none",
-"certificate_mode": "none",
-"plaintext_listener_port": 9000
-```
+The module always looks up an existing public Route53 hosted zone by
+`domain_name`; it does not create or delegate a zone. It always requests a
+DNS-validated ACM certificate for the application hostname and serves HTTPS on
+port 443. A working public delegation is required before applying. Zone-ID,
+certificate-ARN, and plaintext-listener overrides are not supported.
 
 ## Outputs
 
@@ -238,8 +220,7 @@ For early testing without a public certificate:
 - `key_pair_name`: EC2 key pair name.
 - `private_key_path`: generated private key path.
 - `route53_zone_id`: hosted zone ID when applicable.
-- `route53_name_servers`: created hosted zone name servers.
-- `certificate_arn`: ACM certificate ARN when applicable.
+- `certificate_arn`: ACM certificate ARN used by the HTTPS listener.
 
 ## Windows Notes
 

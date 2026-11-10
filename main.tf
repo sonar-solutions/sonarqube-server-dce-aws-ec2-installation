@@ -7,10 +7,9 @@ locals {
   rdp_target_group_name = substr("${local.sanitized_hostname}-rdp-tg", 0, 32)
   domain_fqdn           = format("%s.%s", var.hostname, trim(var.domain_name, "."))
   route53_zone_name     = "${trim(var.domain_name, ".")}."
-  route53_zone_id       = var.route53_zone_mode == "none" ? null : (var.route53_zone_mode == "existing" ? var.route53_zone_id : (var.route53_zone_mode == "create" ? aws_route53_zone.primary[0].zone_id : data.aws_route53_zone.primary[0].zone_id))
-  route53_name_servers  = var.route53_zone_mode == "create" ? aws_route53_zone.primary[0].name_servers : []
-  certificate_arn       = var.certificate_mode == "none" ? null : (var.certificate_mode == "existing" ? var.acm_certificate_arn : aws_acm_certificate_validation.nlb[0].certificate_arn)
-  public_host           = var.route53_zone_mode == "none" ? aws_lb.nlb.dns_name : local.domain_fqdn
+  route53_zone_id       = data.aws_route53_zone.primary[0].zone_id
+  certificate_arn       = aws_acm_certificate_validation.nlb[0].certificate_arn
+  public_host           = local.domain_fqdn
   rds_identifier        = substr(replace(lower(var.rds_name), "/[^a-z0-9-]/", "-"), 0, 63)
   rds_database_name     = substr(replace(lower(var.rds_name), "/[^a-z0-9]/", ""), 0, 63)
   jdbc_url              = "jdbc:postgresql://${aws_db_instance.postgres.address}:5432/${local.rds_database_name}"
@@ -25,7 +24,7 @@ locals {
     "amazon-linux-2023" = {
       owners = ["amazon"]
       filters = {
-        name                  = ["al2023-ami-*-x86_64"]
+        name                  = ["al2023-ami-2023.*-kernel-*-x86_64"]
         "virtualization-type" = ["hvm"]
       }
     }
@@ -63,18 +62,6 @@ resource "terraform_data" "validations" {
     precondition {
       condition     = var.sonarqube_edition == "datacenter" || (var.zip_download_url != null && trimspace(var.zip_download_url) != "")
       error_message = "DCE mode requires the datacenter distribution unless zip_download_url points to a valid DCE installer."
-    }
-    precondition {
-      condition     = var.certificate_mode != "create" || var.route53_zone_mode != "none"
-      error_message = "route53_zone_mode cannot be none when certificate_mode is create because ACM DNS validation needs a hosted zone."
-    }
-    precondition {
-      condition     = var.route53_zone_mode != "existing" || (var.route53_zone_id != null && trimspace(var.route53_zone_id) != "")
-      error_message = "route53_zone_id must be provided when route53_zone_mode is existing."
-    }
-    precondition {
-      condition     = var.certificate_mode != "existing" || (var.acm_certificate_arn != null && trimspace(var.acm_certificate_arn) != "")
-      error_message = "acm_certificate_arn must be provided when certificate_mode is existing."
     }
     precondition {
       condition     = length(var.app_nodes) >= 2

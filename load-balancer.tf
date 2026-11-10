@@ -82,25 +82,14 @@ resource "aws_lb_listener" "rdp" {
 }
 
 data "aws_route53_zone" "primary" {
-  count = var.route53_zone_mode == "lookup" ? 1 : 0
+  count = 1
 
   name         = local.route53_zone_name
   private_zone = false
 }
 
-resource "aws_route53_zone" "primary" {
-  count = var.route53_zone_mode == "create" ? 1 : 0
-
-  name = local.route53_zone_name
-
-  tags = {
-    Name  = local.route53_zone_name
-    Owner = var.owner
-  }
-}
-
 resource "aws_acm_certificate" "nlb" {
-  count = var.certificate_mode == "create" ? 1 : 0
+  count = 1
 
   domain_name       = local.domain_fqdn
   validation_method = "DNS"
@@ -117,7 +106,7 @@ resource "aws_acm_certificate" "nlb" {
 
 resource "aws_route53_record" "cert_validation" {
   for_each = {
-    for dvo in var.certificate_mode == "create" ? aws_acm_certificate.nlb[0].domain_validation_options : [] : dvo.domain_name => {
+    for dvo in aws_acm_certificate.nlb[0].domain_validation_options : dvo.domain_name => {
       name   = dvo.resource_record_name
       record = dvo.resource_record_value
       type   = dvo.resource_record_type
@@ -133,7 +122,7 @@ resource "aws_route53_record" "cert_validation" {
 }
 
 resource "aws_acm_certificate_validation" "nlb" {
-  count = var.certificate_mode == "create" ? 1 : 0
+  count = 1
 
   certificate_arn         = aws_acm_certificate.nlb[0].arn
   validation_record_fqdns = [for record in values(aws_route53_record.cert_validation) : record.fqdn]
@@ -144,7 +133,7 @@ resource "aws_acm_certificate_validation" "nlb" {
 }
 
 resource "aws_lb_listener" "tls" {
-  count = var.certificate_mode == "none" ? 0 : 1
+  count = 1
 
   load_balancer_arn = aws_lb.nlb.arn
   port              = 443
@@ -160,21 +149,8 @@ resource "aws_lb_listener" "tls" {
   depends_on = [aws_acm_certificate_validation.nlb]
 }
 
-resource "aws_lb_listener" "plaintext" {
-  count = var.certificate_mode == "none" ? 1 : 0
-
-  load_balancer_arn = aws_lb.nlb.arn
-  port              = var.plaintext_listener_port
-  protocol          = "TCP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.app.arn
-  }
-}
-
 resource "aws_route53_record" "app_alias" {
-  count = var.route53_zone_mode == "none" ? 0 : 1
+  count = 1
 
   zone_id = local.route53_zone_id
   name    = var.hostname

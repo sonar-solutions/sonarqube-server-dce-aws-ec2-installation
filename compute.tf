@@ -122,6 +122,16 @@ resource "aws_instance" "app" {
     network_interface_id = aws_network_interface.app[count.index].id
   }
 
+  dynamic "root_block_device" {
+    for_each = local.is_windows ? [] : [1]
+    content {
+      volume_size           = var.app_volume_size_gb
+      volume_type           = "gp3"
+      encrypted             = true
+      delete_on_termination = true
+    }
+  }
+
   user_data = local.is_windows ? templatefile("${path.module}/templates/windows_user_data.ps1.tftpl", {
     url              = local.sonar_zip_url
     path             = var.win_sonar_dir
