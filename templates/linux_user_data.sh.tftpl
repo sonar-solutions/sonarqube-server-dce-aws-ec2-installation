@@ -56,7 +56,7 @@ sonar.jdbc.validationQuery=select 1
 $CLUSTER_CONFIG
 SONAR_CONFIG_EOF
 
-useradd --system --no-create-home --shell /sbin/nologin sonar || true
+${agentic_setup}useradd --system --no-create-home --shell /sbin/nologin sonar || true
 mkdir -p "$SONAR_HOME/data" "$SONAR_HOME/temp"
 chown -R sonar:sonar "$SONAR_HOME"
 chown -h sonar:sonar "$SONAR_LINK"

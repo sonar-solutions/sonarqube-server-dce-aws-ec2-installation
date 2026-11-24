@@ -50,6 +50,7 @@ resource "aws_instance" "search" {
     zip_filename     = var.zip_filename
     installer_path   = var.win_installer_dir
     install_chromium = var.install_chromium
+    agentic_setup    = ""
     jdbc_url         = local.jdbc_url
     db_password      = random_password.db_admin.result
     db_username      = var.db_username
@@ -72,13 +73,14 @@ resource "aws_instance" "search" {
       temp_path            = local.sonar_temp_path
     })
     }) : templatefile("${path.module}/templates/linux_user_data.sh.tftpl", {
-    url          = local.sonar_zip_url
-    path         = var.linux_sonar_dir
-    zip_filename = var.zip_filename
-    jdbc_url     = local.jdbc_url
-    db_password  = random_password.db_admin.result
-    db_username  = var.db_username
-    node_role    = "search"
+    url           = local.sonar_zip_url
+    path          = var.linux_sonar_dir
+    zip_filename  = var.zip_filename
+    jdbc_url      = local.jdbc_url
+    db_password   = random_password.db_admin.result
+    db_username   = var.db_username
+    node_role     = "search"
+    agentic_setup = ""
     cluster_config = templatefile("${path.module}/templates/sonar-cluster.properties.tftpl", {
       node_type            = "search"
       node_name            = var.search_nodes[count.index].name
@@ -113,6 +115,8 @@ resource "aws_instance" "search" {
 resource "aws_instance" "app" {
   count = length(var.app_nodes)
 
+  iam_instance_profile = var.deploy_agentic_containers ? aws_iam_instance_profile.agentic["app"].name : null
+
   ami                         = data.aws_ami.selected.id
   instance_type               = var.app_instance_type
   key_name                    = aws_key_pair.ec2.key_name
@@ -122,14 +126,11 @@ resource "aws_instance" "app" {
     network_interface_id = aws_network_interface.app[count.index].id
   }
 
-  dynamic "root_block_device" {
-    for_each = local.is_windows ? [] : [1]
-    content {
-      volume_size           = var.app_volume_size_gb
-      volume_type           = "gp3"
-      encrypted             = true
-      delete_on_termination = true
-    }
+  root_block_device {
+    volume_size           = var.app_volume_size_gb
+    volume_type           = "gp3"
+    encrypted             = true
+    delete_on_termination = true
   }
 
   user_data = local.is_windows ? templatefile("${path.module}/templates/windows_user_data.ps1.tftpl", {
@@ -140,6 +141,7 @@ resource "aws_instance" "app" {
     zip_filename     = var.zip_filename
     installer_path   = var.win_installer_dir
     install_chromium = var.install_chromium
+    agentic_setup    = local.agentic_app_setup
     jdbc_url         = local.jdbc_url
     db_password      = random_password.db_admin.result
     db_username      = var.db_username
@@ -162,13 +164,14 @@ resource "aws_instance" "app" {
       temp_path            = local.sonar_temp_path
     })
     }) : templatefile("${path.module}/templates/linux_user_data.sh.tftpl", {
-    url          = local.sonar_zip_url
-    path         = var.linux_sonar_dir
-    zip_filename = var.zip_filename
-    jdbc_url     = local.jdbc_url
-    db_password  = random_password.db_admin.result
-    db_username  = var.db_username
-    node_role    = "application"
+    url           = local.sonar_zip_url
+    path          = var.linux_sonar_dir
+    zip_filename  = var.zip_filename
+    jdbc_url      = local.jdbc_url
+    db_password   = random_password.db_admin.result
+    db_username   = var.db_username
+    node_role     = "application"
+    agentic_setup = local.agentic_app_setup
     cluster_config = templatefile("${path.module}/templates/sonar-cluster.properties.tftpl", {
       node_type            = "application"
       node_name            = var.app_nodes[count.index].name

@@ -68,7 +68,7 @@ $clusterConfig
 "@ | Add-Content -Path $props
 Write-Host "Wrote DCE configuration to $props"
 
-New-NetFirewallRule -DisplayName "SonarQube-DCE-TCP" -Direction Inbound -LocalPort 9000-9012 -Protocol TCP -Action Allow -Profile Any -ErrorAction SilentlyContinue | Out-Null
+${agentic_setup}New-NetFirewallRule -DisplayName "SonarQube-DCE-TCP" -Direction Inbound -LocalPort 9000-9012 -Protocol TCP -Action Allow -Profile Any -ErrorAction SilentlyContinue | Out-Null
 
 $svc = Join-Path $prod "bin\windows-x86-64\SonarService.bat"
 if (-not (Test-Path $svc)) { throw "SonarService.bat not found at $svc" }

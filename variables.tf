@@ -11,7 +11,7 @@ variable "app_instance_type" {
 
 variable "app_volume_size_gb" {
   type        = number
-  description = "Encrypted gp3 root volume size for Linux DCE application nodes."
+  description = "Encrypted gp3 root volume size in GiB for Linux and Windows DCE application nodes."
   default     = 100
 
   validation {

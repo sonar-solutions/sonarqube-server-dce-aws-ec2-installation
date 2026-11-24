@@ -139,6 +139,7 @@ Cluster shape:
 - `search_nodes`: search node names and subnet placement.
 - `app_instance_type`: EC2 type for application nodes.
 - `search_instance_type`: EC2 type for search nodes.
+- `app_volume_size_gb`: application node root volume size on Linux and Windows (default: 100 GiB).
 - `search_volume_size_gb`: search node root volume size.
 - `search_volume_type`: search node root volume type.
 

@@ -1,0 +1,56 @@
+# The host publishes signing material before waiting for SonarQube to be UP.
+set +x
+(
+  umask 077
+  signing="$SONAR_HOME/conf/agentic"
+  install -d -m 700 "$signing"
+  cd "$signing"
+  command -v aws >/dev/null || dnf install -y awscli-2
+  command -v jq >/dev/null || dnf install -y jq
+  for attempt in $(seq 1 180); do
+    if aws s3api get-object --region '${region}' --bucket '${bucket}' --key app-config.json config.json >/dev/null; then break; fi
+    if [ "$attempt" -eq 180 ]; then echo "Agent host did not publish app-config.json within 30 minutes" >&2; exit 1; fi
+    sleep 10
+  done
+  jq -er '.secret' config.json | base64 -d > instance-secret
+  jq -er '.shared_key' config.json | base64 -d > agentic-shared.key
+  jq -er '.ca' config.json | base64 -d > agentic-ca.pem
+  rm config.json
+  java_home=$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")
+  cp "$java_home/lib/security/cacerts" truststore
+  keytool -importcert -noprompt -alias agentic-ca -file agentic-ca.pem -keystore truststore -storepass changeit
+  wget -q -O rds.pem 'https://truststore.pki.rds.amazonaws.com/${region}/${region}-bundle.pem'
+  awk '/BEGIN CERTIFICATE/ {i++} i {print > ("rds-" i ".pem")}' rds.pem
+  for cert in rds-*.pem; do
+    keytool -importcert -noprompt -alias "$cert" -file "$cert" -keystore truststore -storepass changeit
+  done
+  rm rds.pem rds-*.pem
+  props="$SONAR_HOME/conf/sonar.properties"
+  chmod 600 "$props"
+  cat >> "$props" <<AGENTIC_EOF
+sonar.hunteragent.orchestrator.url=https://${host}:8443
+sonar.remediationagent.orchestrator.url=https://${host}:8443
+sonar.vortex.enabled=true
+sonar.vortex.analysis.url=https://${host}:8444
+sonar.agentic.signing.secretFile=$signing/instance-secret
+sonar.agentic.orchestrator.signingKeyPath=$signing/agentic-shared.key
+sonar.mcp.enabled=true
+sonar.mcp.serverUrl=https://${host}:8445
+sonar.mcp.healthCheckInterval=30
+sonar.jdbc.url=$JDBC_URL?sslmode=verify-full&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory
+sonar.web.javaAdditionalOpts=-Djavax.net.ssl.trustStore=$signing/truststore -Djavax.net.ssl.trustStorePassword=changeit
+sonar.ce.javaAdditionalOpts=-Djavax.net.ssl.trustStore=$signing/truststore -Djavax.net.ssl.trustStorePassword=changeit
+AGENTIC_EOF
+  for prefix in sonar.agentic.storage sonar.agentic.orchestrator.storage; do
+    cat >> "$props" <<STORAGE_EOF
+$prefix.type=S3
+$prefix.bucket=${jobs}
+$prefix.region=${region}
+$prefix.accessKey=${access_key}
+$prefix.secretKey=${secret_key}
+$prefix.pathStyleAccess=false
+$prefix.presignTtlSeconds=21600
+STORAGE_EOF
+  done
+)
+set -x

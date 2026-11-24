@@ -28,6 +28,39 @@ Terraform creates:
 
 Only app nodes are registered behind the public SonarQube listener. Search nodes stay private.
 
+### Optional agentic host (DCE 2026.5)
+
+Add these entries to your tfvars to run the Enterprise agentic bundle on one shared
+Linux EC2 instance in the **first app node's private subnet**. No dedicated VPC,
+subnet, or load balancer is created. The feature defaults to off.
+
+```json
+{
+  "deploy_agentic_containers": true,
+  "agentic_root_volume_size": 150,
+  "agentic_generator_revision": "e563fe9973afa1435d555d9377fefcf93ee7fb3a",
+  "agentic_llm_domains": ["api.anthropic.com"],
+  "mcp_image": "sonarsource/sonarqube-mcp:1.27.1.4770"
+}
+```
+
+App nodes use `agentic.<SonarQube FQDN>` over TLS: orchestrator on 8443, Vortex
+on 8444, and MCP on 8445. Only the app security group can reach those ports.
+The agent host uses the existing database and HTTPS SonarQube listener. Its
+subnet needs outbound access for package/image downloads, S3, and HTTPS callbacks.
+The private bootstrap bucket retains the signing and TLS identity across host
+replacements; a separate private bucket holds shared job data. Protect Terraform
+state and EC2 user data: they contain storage credentials.
+
+**Rollout:** Enabling this on an existing cluster changes application user data
+and plans app instance replacements, not a rolling restart. Review the plan and
+schedule downtime. Search node bootstrap and load balancer health checks are unchanged.
+At first boot the agent host publishes the shared configuration, then waits for
+SonarQube to report `UP` before starting Compose. To diagnose a startup failure,
+check `cloud-init status --long` on the host and app nodes, then
+`journalctl -u sonarqube-agentic` and `sudo docker compose --project-directory /opt/sonarqube-agentic/bundle ps -a`
+on the host. Verify supported models from SonarQube after the containers are healthy.
+
 ## Directory Layout On Nodes
 
 Linux:
